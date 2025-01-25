@@ -10,7 +10,7 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 
 from train import SimpleCNN
-from constants import MODEL_PATH, COREML_PATH, MEAN, STD
+from constants import MODEL_PATH, COREML_PATH, MEAN, STD, CLASSES
 import pillow_heif
 
 pillow_heif.register_heif_opener()
@@ -24,9 +24,6 @@ class SimpleCNNWithSoftmax(SimpleCNN):
         logits = super(SimpleCNNWithSoftmax, self).forward(x)
         probs = F.softmax(logits, dim=1)
         return probs
-    
-def get_class_names():
-    return ['bottle', 'can']
 
 def validate_conversion(pytorch_model, coreml_model, class_names, test_image_path):
     """Compare inference results between PyTorch and Core ML models using the same image."""
@@ -85,7 +82,7 @@ def validate_conversion(pytorch_model, coreml_model, class_names, test_image_pat
 
 def main():
     # Load class names
-    class_names = get_class_names()
+    class_names = CLASSES
     num_classes = len(class_names)
     print("Number of classes:", num_classes)
     

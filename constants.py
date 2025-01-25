@@ -1,9 +1,14 @@
 BATCH_SIZE = 8
-EPOCHS = 200
+EPOCHS = 50
 LEARNING_RATE = 0.001
 IMG_SIZE = 224
+MAX_SIZE = 512 
+SPLIT_RATIO = 0.8
+ORIGINAL_DATA_DIR = "original_data"
+PROCESSED_DATA_DIR = 'processed_data'
 DATA_DIR = "data"
 MODEL_PATH = "bottle_can_simple_cnn_mps.pth"
 COREML_PATH = "bottle_can_simple_cnn_mps.mlpackage"
+CLASSES = ['bottle', 'can']
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
