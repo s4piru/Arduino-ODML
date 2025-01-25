@@ -5,46 +5,15 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split
 import matplotlib.pyplot as plt
-
-BATCH_SIZE = 16
-EPOCHS = 20
-LEARNING_RATE = 0.001
-IMG_SIZE = 224
-DATA_DIR = "data"
+from constants import BATCH_SIZE, EPOCHS, LEARNING_RATE, IMG_SIZE, DATA_DIR, MODEL_PATH, MEAN, STD
 
 
-train_transform = transforms.Compose([
-    transforms.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
-    transforms.RandomHorizontalFlip(p=0.5),
-    transforms.RandomRotation(20),
-    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2),
-    transforms.RandomGrayscale(p=0.2),
-    transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
-    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                         std=[0.5, 0.5, 0.5])
-])
-
-val_transform = transforms.Compose([
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                         std=[0.5, 0.5, 0.5])
-])
-
-
-dataset = datasets.ImageFolder(DATA_DIR, transform=train_transform)
-
-train_size = int(0.8 * len(dataset))
-val_size = len(dataset) - train_size
-train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-
-val_dataset.dataset.transform = val_transform
-
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
-
+def custom_label_transform(label):
+    custom_class_to_idx = {
+        "bottle": 0,
+        "can": 1
+    }
+    return custom_class_to_idx[dataset.classes[label]]
 
 class SimpleCNN(nn.Module):
     def __init__(self, num_classes=2):
@@ -77,82 +46,121 @@ class SimpleCNN(nn.Module):
         # Apply second fully connected layer (output layer)
         x = self.fc2(x)  # Output: [batch_size, num_classes]
         return x
-
-model = SimpleCNN(num_classes=2)
-
-if torch.backends.mps.is_available():
-    device = torch.device("mps")
-else:
-    device = torch.device("cpu")
-
-model.to(device)
-
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-
-train_losses = []
-val_losses = []
-val_accuracies = []
-
-for epoch in range(EPOCHS):
-    model.train()
-    running_loss = 0.0
-    for images, labels in train_loader:
-        images, labels = images.to(device), labels.to(device)
-        
-        optimizer.zero_grad()
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
-        running_loss += loss.item()
     
-    train_loss = running_loss / len(train_loader)
-    train_losses.append(train_loss)
+if __name__ == "__main__":
     
-    # Validation
-    model.eval()
-    val_loss = 0.0
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for images, labels in val_loader:
+    train_transform = transforms.Compose([
+        transforms.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomRotation(20),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2),
+        transforms.RandomGrayscale(p=0.2),
+        transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
+        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=MEAN,
+                            std=STD)
+    ])
+
+    val_transform = transforms.Compose([
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=MEAN,
+                            std=STD)
+    ])
+    
+    train_dir = os.path.join(DATA_DIR, 'train')
+    train_dataset = datasets.ImageFolder(train_dir, transform=train_transform)
+    
+    test_dir = os.path.join(DATA_DIR, 'test')
+    val_dataset = datasets.ImageFolder(test_dir, transform=val_transform)
+
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+
+    model = SimpleCNN(num_classes=2)
+
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+
+    model.to(device)
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    train_losses = []
+    val_losses = []
+    val_accuracies = []
+
+    best_val_acc = 0.0
+    last_10_percent_epoch = int(EPOCHS * 0.9)
+
+    for epoch in range(EPOCHS):
+        model.train()
+        running_loss = 0.0
+        for images, labels in train_loader:
             images, labels = images.to(device), labels.to(device)
             
+            optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
-            val_loss += loss.item()
-            
-            # Get predictions
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-    
-    # Calculate average validation loss and accuracy
-    val_loss /= len(val_loader)
-    val_acc = 100.0 * correct / total
-    val_losses.append(val_loss)
-    val_accuracies.append(val_acc)
-    
-    # Print epoch statistics
-    print(f"Epoch [{epoch+1}/{EPOCHS}] "
-          f"Train Loss: {train_loss:.4f}, "
-          f"Val Loss: {val_loss:.4f}, "
-          f"Val Acc: {val_acc:.2f}%")
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+        
+        train_loss = running_loss / len(train_loader)
+        train_losses.append(train_loss)
+        
+        # Validation
+        model.eval()
+        val_loss = 0.0
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for images, labels in val_loader:
+                images, labels = images.to(device), labels.to(device)
+                
+                outputs = model(images)
+                loss = criterion(outputs, labels)
+                val_loss += loss.item()
+                
+                # Get predictions
+                _, predicted = torch.max(outputs, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+        
+        # Calculate average validation loss and accuracy
+        val_loss /= len(val_loader)
+        val_acc = 100.0 * correct / total
+        val_losses.append(val_loss)
+        val_accuracies.append(val_acc)
+        
+        print(f"Epoch [{epoch+1}/{EPOCHS}] "
+              f"Train Loss: {train_loss:.4f}, "
+              f"Val Loss: {val_loss:.4f}, "
+              f"Val Acc: {val_acc:.2f}%")
+        
+        # Check if current epoch is within the last 10% of training
+        if epoch >= last_10_percent_epoch:
+            # Save the best model within the last 10% epochs
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                torch.save(model.state_dict(), MODEL_PATH)
+                print(f"Best model updated at epoch {epoch+1} with Val Acc: {val_acc:.2f}%")
 
-# Save model
-torch.save(model.state_dict(), "bottle_can_simple_cnn_mps.pth")
-print("Training completed. Saved to 'bottle_can_simple_cnn_mps.pth'")
+    print("Training completed.")
 
-# Plot Training and Validation Loss
-plt.figure(figsize=(10,5))
-plt.plot(range(1, EPOCHS+1), train_losses, label='Train Loss')
-plt.plot(range(1, EPOCHS+1), val_losses, label='Validation Loss')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.title('Training and Validation Loss per Epoch')
-plt.legend()
-plt.grid(True)
-plt.tight_layout()
-plt.savefig('loss_plot.png')
-plt.show()
+    # Plot Training and Validation Loss
+    plt.figure(figsize=(10,5))
+    plt.plot(range(1, EPOCHS+1), train_losses, label='Train Loss')
+    plt.plot(range(1, EPOCHS+1), val_losses, label='Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss per Epoch')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('loss_plot.png')
+    plt.show()
