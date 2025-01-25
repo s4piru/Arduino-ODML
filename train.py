@@ -1,0 +1,158 @@
+import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, random_split
+import matplotlib.pyplot as plt
+
+BATCH_SIZE = 16
+EPOCHS = 20
+LEARNING_RATE = 0.001
+IMG_SIZE = 224
+DATA_DIR = "data"
+
+
+train_transform = transforms.Compose([
+    transforms.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
+    transforms.RandomHorizontalFlip(p=0.5),
+    transforms.RandomRotation(20),
+    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2),
+    transforms.RandomGrayscale(p=0.2),
+    transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
+    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+
+val_transform = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                         std=[0.5, 0.5, 0.5])
+])
+
+
+dataset = datasets.ImageFolder(DATA_DIR, transform=train_transform)
+
+train_size = int(0.8 * len(dataset))
+val_size = len(dataset) - train_size
+train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+val_dataset.dataset.transform = val_transform
+
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+
+
+class SimpleCNN(nn.Module):
+    def __init__(self, num_classes=2):
+        super(SimpleCNN, self).__init__()
+        # First layer: input channels=3 (RGB), output channels=16
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)  # Max pooling
+        # Second layer: input channels=16, output channels=32
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
+        # Third layer: input channels=32, output channels=64
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        
+        # Fully connected layers
+        self.fc1 = nn.Linear(64 * 28 * 28, 128)  # Assuming input image size of 224x224
+        self.fc2 = nn.Linear(128, num_classes)   # Output layer
+
+    def forward(self, x):
+        # Apply first convolutional layer, ReLU activation, and pooling
+        x = self.pool(nn.ReLU()(self.conv1(x)))  # Output: [16, 112, 112]
+        # Apply second convolutional layer, ReLU activation, and pooling
+        x = self.pool(nn.ReLU()(self.conv2(x)))  # Output: [32, 56, 56]
+        # Apply third convolutional layer, ReLU activation, and pooling
+        x = self.pool(nn.ReLU()(self.conv3(x)))  # Output: [64, 28, 28]
+        
+        # Flatten the tensor for fully connected layers
+        x = x.view(x.size(0), -1)  # Output: [batch_size, 64*28*28]
+        
+        # Apply first fully connected layer and ReLU activation
+        x = nn.ReLU()(self.fc1(x))  # Output: [batch_size, 128]
+        # Apply second fully connected layer (output layer)
+        x = self.fc2(x)  # Output: [batch_size, num_classes]
+        return x
+
+model = SimpleCNN(num_classes=2)
+
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+else:
+    device = torch.device("cpu")
+
+model.to(device)
+
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+train_losses = []
+val_losses = []
+val_accuracies = []
+
+for epoch in range(EPOCHS):
+    model.train()
+    running_loss = 0.0
+    for images, labels in train_loader:
+        images, labels = images.to(device), labels.to(device)
+        
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        running_loss += loss.item()
+    
+    train_loss = running_loss / len(train_loader)
+    train_losses.append(train_loss)
+    
+    # Validation
+    model.eval()
+    val_loss = 0.0
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for images, labels in val_loader:
+            images, labels = images.to(device), labels.to(device)
+            
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            val_loss += loss.item()
+            
+            # Get predictions
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    
+    # Calculate average validation loss and accuracy
+    val_loss /= len(val_loader)
+    val_acc = 100.0 * correct / total
+    val_losses.append(val_loss)
+    val_accuracies.append(val_acc)
+    
+    # Print epoch statistics
+    print(f"Epoch [{epoch+1}/{EPOCHS}] "
+          f"Train Loss: {train_loss:.4f}, "
+          f"Val Loss: {val_loss:.4f}, "
+          f"Val Acc: {val_acc:.2f}%")
+
+# Save model
+torch.save(model.state_dict(), "bottle_can_simple_cnn_mps.pth")
+print("Training completed. Saved to 'bottle_can_simple_cnn_mps.pth'")
+
+# Plot Training and Validation Loss
+plt.figure(figsize=(10,5))
+plt.plot(range(1, EPOCHS+1), train_losses, label='Train Loss')
+plt.plot(range(1, EPOCHS+1), val_losses, label='Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.title('Training and Validation Loss per Epoch')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig('loss_plot.png')
+plt.show()
