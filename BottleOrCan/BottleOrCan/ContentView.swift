@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var classificationLabel: String = "Classification results will be displayed here"
     @State private var isLoading: Bool = false
     @State private var dumpURL: URL? = nil
+    @State private var isShowingCamera: Bool = false
     let mean: [Float] = [0.485, 0.456, 0.406]
     let std:  [Float] = [0.229, 0.224, 0.225]
     let classNames = ["bottle", "can"]
@@ -50,6 +51,28 @@ struct ContentView: View {
                         if let newItem = newItem {
                             await loadImage(from: newItem)
                         }
+                    }
+                }
+                
+                Button(action: {
+                    isShowingCamera = true
+                }) {
+                    Text("Take Photo")
+                        .font(.headline)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding(.horizontal)
+                .sheet(isPresented: $isShowingCamera) {
+                    ImagePicker(sourceType: .camera) { image in
+                        if let image = image {
+                            self.selectedImage = image
+                            classifyAndDumpImage(image)
+                        }
+                        isShowingCamera = false
                     }
                 }
                 
@@ -259,4 +282,41 @@ extension UIImage {
         guard let croppedCGImage = cgImage.cropping(to: cropRect) else { return nil }
         return UIImage(cgImage: croppedCGImage, scale: self.scale, orientation: self.imageOrientation)
     }
+}
+
+struct ImagePicker: UIViewControllerRepresentable {
+    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: ImagePicker
+
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.onImagePicked(nil)
+            picker.dismiss(animated: true)
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            let image = info[.originalImage] as? UIImage
+            parent.onImagePicked(image)
+            picker.dismiss(animated: true)
+        }
+    }
+
+    var sourceType: UIImagePickerController.SourceType = .photoLibrary
+    var onImagePicked: (UIImage?) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIViewController(context: Context) -> some UIViewController {
+        let picker = UIImagePickerController()
+        picker.sourceType = self.sourceType
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewControllerType, context: Context) {}
 }
