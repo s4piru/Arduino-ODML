@@ -25,8 +25,8 @@ class SimpleCNN(nn.Module):
         self.conv2 = nn.Conv2d(8, 16, kernel_size=3, stride=1, padding=1)
         
         # Fully connected layers
-        self.fc1 = nn.Linear(16 * (IMG_SIZE // 4) * (IMG_SIZE // 4), 64)  # Adjusted for 2 pooling layers
-        self.fc2 = nn.Linear(64, num_classes)   # Output layer
+        self.fc1 = nn.Linear(16 * (IMG_SIZE // 4) * (IMG_SIZE // 4), 32)  # Adjusted for 2 pooling layers
+        self.fc2 = nn.Linear(32, num_classes)   # Output layer
 
     def forward(self, x):
         # After conv1 + pool -> shape: [16, IMG_SIZE/2, IMG_SIZE/2]
