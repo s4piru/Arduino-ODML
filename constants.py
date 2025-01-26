@@ -1,5 +1,6 @@
 BATCH_SIZE = 8
 EPOCHS = 50
+TF_EPOCHS = 20
 LEARNING_RATE = 0.001
 IMG_SIZE = 224
 MAX_SIZE = 512 
@@ -8,7 +9,9 @@ ORIGINAL_DATA_DIR = "original_data"
 PROCESSED_DATA_DIR = 'processed_data'
 DATA_DIR = "data"
 MODEL_PATH = "bottle_can_simple_cnn_mps.pth"
+MODEL_PATH_TF = "bottle_can_simple_cnn_mps.h5"
 COREML_PATH = "bottle_can_simple_cnn_mps.mlpackage"
+TFLITE_PATH = "bottle_can_simple_cnn_mps.tflite"
 CLASSES = ['bottle', 'can']
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
