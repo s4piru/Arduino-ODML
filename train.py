@@ -23,28 +23,24 @@ class SimpleCNN(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)  # Max pooling
         # Second layer: input channels=16, output channels=32
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
-        # Third layer: input channels=32, output channels=64
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
         
         # Fully connected layers
-        self.fc1 = nn.Linear(64 * 28 * 28, 128)  # Assuming input image size of 224x224
+        self.fc1 = nn.Linear(32 * (IMG_SIZE // 4) * (IMG_SIZE // 4), 128)  # Adjusted for 2 pooling layers
         self.fc2 = nn.Linear(128, num_classes)   # Output layer
 
     def forward(self, x):
-        # Apply first convolutional layer, ReLU activation, and pooling
-        x = self.pool(nn.ReLU()(self.conv1(x)))  # Output: [16, 112, 112]
-        # Apply second convolutional layer, ReLU activation, and pooling
-        x = self.pool(nn.ReLU()(self.conv2(x)))  # Output: [32, 56, 56]
-        # Apply third convolutional layer, ReLU activation, and pooling
-        x = self.pool(nn.ReLU()(self.conv3(x)))  # Output: [64, 28, 28]
+        # After conv1 + pool -> shape: [16, IMG_SIZE/2, IMG_SIZE/2]
+        x = self.pool(nn.ReLU()(self.conv1(x)))
+        # After conv2 + pool -> shape: [32, IMG_SIZE/4, IMG_SIZE/4]
+        x = self.pool(nn.ReLU()(self.conv2(x)))
         
         # Flatten the tensor for fully connected layers
-        x = x.view(x.size(0), -1)  # Output: [batch_size, 64*28*28]
+        x = x.view(x.size(0), -1)
         
         # Apply first fully connected layer and ReLU activation
-        x = nn.ReLU()(self.fc1(x))  # Output: [batch_size, 128]
+        x = nn.ReLU()(self.fc1(x))
         # Apply second fully connected layer (output layer)
-        x = self.fc2(x)  # Output: [batch_size, num_classes]
+        x = self.fc2(x)
         return x
     
 if __name__ == "__main__":
@@ -54,19 +50,16 @@ if __name__ == "__main__":
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(20),
         transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2),
-        transforms.RandomGrayscale(p=0.2),
         transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
-        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=10),
+        transforms.RandomAffine(degrees=0, translate=(0.05, 0.05), scale=(0.9, 1.1), shear=5),
         transforms.ToTensor(),
-        transforms.Normalize(mean=MEAN,
-                            std=STD)
+        transforms.Normalize(mean=MEAN, std=STD)
     ])
 
     val_transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=MEAN,
-                            std=STD)
+        transforms.Normalize(mean=MEAN, std=STD)
     ])
     
     train_dir = os.path.join(DATA_DIR, 'train')

@@ -10,7 +10,7 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 
 from train import SimpleCNN
-from constants import MODEL_PATH, COREML_PATH, MEAN, STD, CLASSES
+from constants import MODEL_PATH, COREML_PATH, MEAN, STD, CLASSES, IMG_SIZE 
 import pillow_heif
 
 pillow_heif.register_heif_opener()
@@ -28,7 +28,7 @@ def validate_conversion(pytorch_model, coreml_model, class_names, test_image_pat
     """Compare inference results between PyTorch and Core ML models using the same image."""
     
     transform_for_test = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize(mean=MEAN, std=STD),
     ])
@@ -85,7 +85,7 @@ def main():
     model_pt.load_state_dict(state_dict)
     model_pt.eval()
     
-    dummy_input = torch.randn(1, 3, 224, 224)
+    dummy_input = torch.randn(1, 3, IMG_SIZE, IMG_SIZE)
     traced_model = torch.jit.trace(model_pt, dummy_input)
     
     classifier_config = ct.ClassifierConfig(
@@ -98,7 +98,7 @@ def main():
         inputs=[
             ct.TensorType(
                 name="input_tensor",
-                shape=(1, 3, 224, 224),
+                shape=(1, 3, IMG_SIZE, IMG_SIZE),
                 dtype=np.float32
             )
         ],
