@@ -80,8 +80,6 @@ def convert_tf_to_tflite(tf_model_path="saved_model_tf", tflite_model_path="mode
         val_loader = DataLoader(val_dataset, batch_size=1, shuffle=True)
 
         for i, (images, _) in enumerate(val_loader):
-            if i >= 200:
-                break
             # images.shape: (1, 3, IMG_SIZE, IMG_SIZE) -> (1, IMG_SIZE, IMG_SIZE, 3)
             images = images.numpy().transpose(0, 2, 3, 1)  # NCHW to NHWC
             yield [images]
