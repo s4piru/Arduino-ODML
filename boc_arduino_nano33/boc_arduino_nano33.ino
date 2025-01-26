@@ -1,67 +1,37 @@
-#include <Arduino.h>
-#include <JPEGDecoder.h>
 #include <ArduTFLite.h>
+#include "raw_image.h"
 
 // Pre-trained and converted TFLite model
 #include "model.h"
 
-// Embedded JPEG image
-#include "test_can_min_jpg.h"
-
 // Memory area (Tensor Arena)
-constexpr int TENSOR_ARENA_SIZE = 5 * 1024;  
+constexpr int TENSOR_ARENA_SIZE = 2 * 1024; 
 static byte tensorArena[TENSOR_ARENA_SIZE] __attribute__((aligned(16)));
 
 // Model class names
 static const char* kCategoryNames[] = {"bottle", "can"};
 
-// Expected input image size (64x64, RGB 3 channels)
+// Expected input image size (32x32, RGB 3 channels)
 constexpr int IMG_WIDTH  = 32;
 constexpr int IMG_HEIGHT = 32;
 constexpr int IMG_CHANNELS = 3;
 
-// Load JPEG → Convert from 16-bit (RGB565) → float (0..1) × RGB
-bool decodeJpegToFloat(const uint8_t* jpegData, size_t jpegLen,
-                       float* outImage, int outW, int outH) 
-{
-  // Decompress the embedded JPEG using JPEGDecoder
-  int ret = JpegDec.decodeArray(jpegData, jpegLen);
-  if (ret == 0) {
-    Serial.println("JPEG decode failed.");
-    return false;
-  }
-
-  int srcW = JpegDec.width;
-  int srcH = JpegDec.height;
-
-  // Nearest neighbor resizing + RGB565 → float (R, G, B)
+// RAW data to float
+void loadRawToFloat(float* outImage, int outW, int outH) {
   for (int y = 0; y < outH; y++) {
-    int srcY = map(y, 0, outH, 0, srcH - 1);
     for (int x = 0; x < outW; x++) {
-      int srcX = map(x, 0, outW, 0, srcW - 1);
-
-      // pImage is 16-bit (5-6-5)
-      uint16_t pixel565 = JpegDec.pImage[srcY * srcW + srcX];
-      uint8_t r = (pixel565 & 0xF800) >> 8;  // R5 -> R8
-      uint8_t g = (pixel565 & 0x07E0) >> 3;  // G6 -> G8
-      uint8_t b = (pixel565 & 0x001F) << 3;  // B5 -> B8
-
-      float rf = r / 255.0f;
-      float gf = g / 255.0f;
-      float bf = b / 255.0f;
-
-      int dstIdx = (y * outW + x) * IMG_CHANNELS;
-      outImage[dstIdx + 0] = rf;
-      outImage[dstIdx + 1] = gf;
-      outImage[dstIdx + 2] = bf;
+      for (int c = 0; c < IMG_CHANNELS; c++) {
+        int idx = (y * outW + x) * IMG_CHANNELS + c;
+        uint8_t pixel = pgm_read_byte(&rawImage[idx]);
+        outImage[idx] = pixel / 255.0f;  // Normalize 0.0 - 1.0
+      }
     }
   }
-  return true;
 }
 
 void setup() {
   Serial.begin(9600);
-  delay(1000); 
+  delay(1000);
   while (!Serial) {}
 
   Serial.println("===== Minimal ArduTFLite Image Classification =====");
@@ -73,17 +43,12 @@ void setup() {
   }
   Serial.println("modelInit() success!");
 
-  // Convert JPEG image to float array
+  // Convert RAW image to float array
   static float inputImage[IMG_WIDTH * IMG_HEIGHT * IMG_CHANNELS];
-  if (!decodeJpegToFloat(test_can_min_jpg, test_can_min_jpg_len,
-                         inputImage, IMG_WIDTH, IMG_HEIGHT)) {
-    Serial.println("decodeJpegToFloat failed!");
-    while (1) { delay(10); }
-  }
-  Serial.println("JPEG decode done.");
+  loadRawToFloat(inputImage, IMG_WIDTH, IMG_HEIGHT);
+  Serial.println("RAW image loaded and converted.");
 
-  // Set input tensor (modelSetInput)
-  // Write float array element by element with index specification
+  // Set input tensor
   const int inputCount = IMG_WIDTH * IMG_HEIGHT * IMG_CHANNELS;
   for (int i = 0; i < inputCount; i++) {
     if (!modelSetInput(inputImage[i], i)) {
