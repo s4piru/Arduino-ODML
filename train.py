@@ -18,15 +18,15 @@ def custom_label_transform(label):
 class SimpleCNN(nn.Module):
     def __init__(self, num_classes=2):
         super(SimpleCNN, self).__init__()
-        # First layer: input channels=3 (RGB), output channels=16
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1)
+        # First layer: input channels=3 (RGB), output channels=8
+        self.conv1 = nn.Conv2d(3, 8, kernel_size=3, stride=1, padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)  # Max pooling
-        # Second layer: input channels=16, output channels=32
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
+        # Second layer: input channels=8, output channels=16
+        self.conv2 = nn.Conv2d(8, 16, kernel_size=3, stride=1, padding=1)
         
         # Fully connected layers
-        self.fc1 = nn.Linear(32 * (IMG_SIZE // 4) * (IMG_SIZE // 4), 128)  # Adjusted for 2 pooling layers
-        self.fc2 = nn.Linear(128, num_classes)   # Output layer
+        self.fc1 = nn.Linear(16 * (IMG_SIZE // 4) * (IMG_SIZE // 4), 64)  # Adjusted for 2 pooling layers
+        self.fc2 = nn.Linear(64, num_classes)   # Output layer
 
     def forward(self, x):
         # After conv1 + pool -> shape: [16, IMG_SIZE/2, IMG_SIZE/2]
