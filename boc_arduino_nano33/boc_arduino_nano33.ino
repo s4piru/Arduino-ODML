@@ -16,8 +16,8 @@ static byte tensorArena[TENSOR_ARENA_SIZE] __attribute__((aligned(16)));
 static const char* kCategoryNames[] = {"bottle", "can"};
 
 // Expected input image size (64x64, RGB 3 channels)
-constexpr int IMG_WIDTH  = 64;
-constexpr int IMG_HEIGHT = 64;
+constexpr int IMG_WIDTH  = 32;
+constexpr int IMG_HEIGHT = 32;
 constexpr int IMG_CHANNELS = 3;
 
 // Load JPEG → Convert from 16-bit (RGB565) → float (0..1) × RGB
@@ -60,7 +60,8 @@ bool decodeJpegToFloat(const uint8_t* jpegData, size_t jpegLen,
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
+  delay(1000); 
   while (!Serial) {}
 
   Serial.println("===== Minimal ArduTFLite Image Classification =====");
