@@ -1,3 +1,9 @@
+"""
+- Using a pre-trained .pth file with PyTorch to:
+  1) Convert it to ONNX → TensorFlow → TFLite (.tflite)
+  2) Compare the inference results of the PyTorch model and the TFLite model with the same input image
+"""
+
 import os
 import sys
 import torch
@@ -7,16 +13,17 @@ import numpy as np
 from PIL import Image
 import pillow_heif
 import onnx
-from onnx_tf.backend import prepare
+from onnx2tf import convert as onnx2tf_convert
 import tensorflow as tf
 import torchvision.transforms as transforms
-from constants import MODEL_PATH, MEAN, STD, CLASSES
 from train import SimpleCNN
+from constants import MEAN, STD, CLASSES, MODEL_PATH, TFLITE_PATH, ONNX_PATH, TF_MODEL_PATH
 
 pillow_heif.register_heif_opener()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 class SimpleCNNWithSoftmax(SimpleCNN):
-    """Extended SimpleCNN that applies softmax to the logits."""
     def __init__(self, num_classes=2):
         super(SimpleCNNWithSoftmax, self).__init__(num_classes)
     
@@ -26,9 +33,10 @@ class SimpleCNNWithSoftmax(SimpleCNN):
         return probs
 
 def export_to_onnx(pytorch_model, onnx_model_path="model.onnx"):
-    """Export PyTorch model to ONNX format."""
+    """Export PyTorch model to ONNX format"""
     pytorch_model.eval()
-    dummy_input = torch.randn(1, 3, 224, 224)
+    dummy_input = torch.randn(1, 3, 224, 224, device=device)
+    
     torch.onnx.export(
         pytorch_model,
         dummy_input,
@@ -40,26 +48,31 @@ def export_to_onnx(pytorch_model, onnx_model_path="model.onnx"):
     )
     print(f"[Export ONNX] Saved to {onnx_model_path}")
 
-def convert_onnx_to_tf(onnx_model_path="model.onnx", tf_model_path="model_tf"):
-    """Convert ONNX model to TensorFlow SavedModel using onnx-tf."""
-    onnx_model = onnx.load(onnx_model_path)
-    tf_rep = prepare(onnx_model)
-    tf_rep.export_graph(tf_model_path)
+def convert_onnx_to_tf_with_onnx2tf(onnx_model_path="model.onnx", tf_model_path="saved_model_tf"):
+    """
+    Convert ONNX to TensorFlow SavedModel format using onnx2tf.
+    Setting output_signaturedefs=True makes the SavedModel easier to convert to TFLite.
+    """
+    onnx2tf_convert(
+        input_onnx_file_path=onnx_model_path,
+        output_folder_path=tf_model_path,
+        output_signaturedefs=True
+    )
     print(f"[ONNX -> TF] Saved TensorFlow model to {tf_model_path}")
 
-def convert_tf_to_tflite(tf_model_path="model_tf", tflite_model_path="model.tflite"):
-    """Convert TensorFlow SavedModel to TFLite format."""
+def convert_tf_to_tflite(tf_model_path="saved_model_tf", tflite_model_path="model.tflite"):
+    """Convert TensorFlow SavedModel to TFLite"""
     converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
-    # converter.optimizations = [tf.lite.Optimize.DEFAULT]  # Example of quantization or optimization
+    # Set quantization or other options here if needed
+    # converter.optimizations = [tf.lite.Optimize.DEFAULT]
     tflite_model = converter.convert()
     with open(tflite_model_path, "wb") as f:
         f.write(tflite_model)
     print(f"[TF -> TFLite] Saved TFLite model to {tflite_model_path}")
 
+
 def validate_conversion_tflite(pytorch_model, tflite_model_path, class_names, test_image_path):
-    """Compare inference results between PyTorch and TFLite models using the same image."""
-    
-    # Prepare input
+    """Compare the results of the PyTorch model and the TFLite model"""
     transform_for_test = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -67,36 +80,31 @@ def validate_conversion_tflite(pytorch_model, tflite_model_path, class_names, te
     ])
     
     image = Image.open(test_image_path).convert('RGB')
-    input_tensor = transform_for_test(image).unsqueeze(0)  # shape=(1, 3, 224, 224)
+    input_tensor = transform_for_test(image).unsqueeze(0).to(device)  # shape=(1,3,224,224)
     
-    # PyTorch inference
     pytorch_model.eval()
     with torch.no_grad():
         outputs_pt = pytorch_model(input_tensor)
-    probs_pt = outputs_pt.squeeze(0).numpy()  # shape=(num_classes,)
+    probs_pt = outputs_pt.squeeze(0).cpu().numpy()
     pt_pred_idx = np.argmax(probs_pt)
     pt_pred_class = class_names[pt_pred_idx]
     pt_pred_conf = probs_pt[pt_pred_idx]
     
-    # TFLite inference
     interpreter = tf.lite.Interpreter(model_path=tflite_model_path)
     interpreter.allocate_tensors()
     
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
     
-    # TFLite expects NHWC by default if it was converted from TensorFlow.
-    # But if the model is exported in NCHW form, we might need to transpose or verify shapes.
-    # For demonstration, let's assume it's expecting the same shape (1, 3, 224, 224).
+    # Convert NCHW -> NHWC
+    tflite_input = input_tensor.cpu().numpy().astype(np.float32)  # (1,3,224,224)
+    tflite_input = np.transpose(tflite_input, (0, 2, 3, 1))       # -> (1,224,224,3)
     
-    # Convert PyTorch tensor to numpy float32
-    tflite_input = input_tensor.cpu().numpy().astype(np.float32)
     interpreter.set_tensor(input_details[0]['index'], tflite_input)
     interpreter.invoke()
-    output_data = interpreter.get_tensor(output_details[0]['index'])  # shape could be (1, num_classes)
+    output_data = interpreter.get_tensor(output_details[0]['index'])  # shape=(1, num_classes)
     
-    # If the output is logits or probabilities depends on how it was converted
-    probs_tf = output_data.squeeze(0)  # shape=(num_classes,)
+    probs_tf = output_data.squeeze(0)
     tf_pred_idx = np.argmax(probs_tf)
     tf_pred_class = class_names[tf_pred_idx]
     tf_pred_conf = probs_tf[tf_pred_idx]
@@ -106,7 +114,6 @@ def validate_conversion_tflite(pytorch_model, tflite_model_path, class_names, te
     print(f"[TFLite ] Predicted class: {tf_pred_class}  (Prob = {tf_pred_conf*100:.2f}%)")
 
 def main():
-    # Load PyTorch model
     class_names = CLASSES
     num_classes = len(class_names)
     print("Number of classes:", num_classes)
@@ -114,29 +121,28 @@ def main():
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
     
-    model_pt = SimpleCNNWithSoftmax(num_classes)
-    state_dict = torch.load(MODEL_PATH, map_location='cpu')
+    model_pt = SimpleCNNWithSoftmax(num_classes).to(device)
+    state_dict = torch.load(MODEL_PATH, map_location=device)
     model_pt.load_state_dict(state_dict)
     model_pt.eval()
     print("[Load PyTorch] Loaded .pth model.")
 
-    # Export to ONNX, TF, TFLite
-    onnx_model_path = "model.onnx"
-    tf_model_dir = "model_tf"
-    tflite_model_path = "model.tflite"
-    export_to_onnx(model_pt, onnx_model_path)
-    convert_onnx_to_tf(onnx_model_path, tf_model_dir)
-    convert_tf_to_tflite(tf_model_dir, tflite_model_path)
+    if not os.path.exists(TF_MODEL_PATH):
+        os.makedirs(TF_MODEL_PATH)
     
-    # If user provides an image path via command line, do comparison
+    export_to_onnx(model_pt, ONNX_PATH)
+    convert_onnx_to_tf_with_onnx2tf(ONNX_PATH, TF_MODEL_PATH)
+    convert_tf_to_tflite(TF_MODEL_PATH, TFLITE_PATH)
+    
     if len(sys.argv) > 1:
         test_image_path = sys.argv[1]
         if os.path.isfile(test_image_path):
-            validate_conversion_tflite(model_pt, tflite_model_path, class_names, test_image_path)
+            validate_conversion_tflite(model_pt, TFLITE_PATH, class_names, test_image_path)
         else:
             print(f"File not found: {test_image_path}")
     else:
-        print("No test image provided for validation.\nUsage: python this_script.py <test_image_path>")
+        print("No test image provided for validation.")
+        print("Usage: python this_script.py <test_image_path>")
 
 if __name__ == "__main__":
     main()
