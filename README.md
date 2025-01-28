@@ -37,7 +37,7 @@ This project is designed to identify bottle or can on ARDUINO NANO 33 BLE.
 
 ## TODO
 
-Connect to a camera (Arducam Mini) to Arduino nano 33 BLE to implement real-time inference.
+Connect a camera (Arducam Mini) to Arduino nano 33 BLE to implement real-time inference.
 
 ## iOS Preview
 Additionally, I converted the trained PyTorch model to CoreML and deployed to SwiftUI app for test.
