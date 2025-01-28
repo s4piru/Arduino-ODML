@@ -68,7 +68,6 @@ def convert_tf_to_tflite(tf_model_path="saved_model_tf", tflite_model_path="mode
     
     # Enable full integer quantization
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.target_spec.supported_types = [tf.float16]
     
     # Define a representative dataset generator for calibration
     """
