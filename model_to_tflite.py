@@ -68,8 +68,11 @@ def convert_tf_to_tflite(tf_model_path="saved_model_tf", tflite_model_path="mode
     
     # Enable full integer quantization
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.target_spec.supported_types = [tf.float16]
     
     # Define a representative dataset generator for calibration
+    """
+    # commented out because Arduino Nano 33 does not have int8 support
     def representative_dataset_gen():
         val_transform = transforms.Compose([
             transforms.Resize((IMG_SIZE, IMG_SIZE)),
@@ -87,9 +90,10 @@ def convert_tf_to_tflite(tf_model_path="saved_model_tf", tflite_model_path="mode
     converter.representative_dataset = representative_dataset_gen
     
     # Ensure that if the model has any floating point ops, they are converted to integer
-    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-    converter.inference_input_type = tf.uint8
-    converter.inference_output_type = tf.uint8
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS]
+    converter.inference_input_type = tf.float32
+    converter.inference_output_type = tf.float32
+    """
     
     # Convert the model
     try:
@@ -135,17 +139,22 @@ def validate_conversion_tflite(pytorch_model, tflite_model_path, class_names, te
     tflite_input = input_tensor.cpu().numpy().astype(np.float32)  # (1,3,H,W)
     tflite_input = np.transpose(tflite_input, (0, 2, 3, 1))       # (1,H,W,3)
     
-    # Normalize input data to match the quantization parameters
+    """
+    # commented out because Arduino Nano 33 does not have int8 support
     tflite_input = tflite_input / input_scale + input_zero_point
     tflite_input = np.clip(tflite_input, 0, 255).astype(input_details[0]['dtype'])
+    """
 
     interpreter.set_tensor(input_details[0]['index'], tflite_input)
     interpreter.invoke()
     output_data = interpreter.get_tensor(output_details[0]['index'])  # (1, num_classes)
 
-    # Dequantize output if necessary
+    """
+    # commented out because Arduino Nano 33 does not have int8 support
     output_scale, output_zero_point = output_details[0]['quantization']
     probs_tf = (output_data.astype(np.float32) - output_zero_point) * output_scale
+    """
+    probs_tf = output_data
     tf_pred_idx = np.argmax(probs_tf)
     tf_pred_class = class_names[tf_pred_idx]
     tf_pred_conf = probs_tf[0, tf_pred_idx].item()
