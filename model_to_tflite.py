@@ -66,12 +66,12 @@ def convert_tf_to_tflite(tf_model_path="saved_model_tf", tflite_model_path="mode
     """Convert TensorFlow SavedModel to quantized TFLite model suitable for Arduino Nano 33."""
     converter = tf.lite.TFLiteConverter.from_saved_model(tf_model_path)
     
+    """
     # Enable full integer quantization
+    # commented out because Arduino Nano 33 does not have int8 support
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     
     # Define a representative dataset generator for calibration
-    """
-    # commented out because Arduino Nano 33 does not have int8 support
     def representative_dataset_gen():
         val_transform = transforms.Compose([
             transforms.Resize((IMG_SIZE, IMG_SIZE)),
