@@ -5,15 +5,15 @@
 #include "model.h"
 
 // Memory area (Tensor Arena)
-constexpr int TENSOR_ARENA_SIZE = 2 * 1024; 
+constexpr int TENSOR_ARENA_SIZE = 128 * 1024; 
 static byte tensorArena[TENSOR_ARENA_SIZE] __attribute__((aligned(16)));
 
 // Model class names
 static const char* kCategoryNames[] = {"bottle", "can"};
 
-// Expected input image size (32x32, RGB 3 channels)
-constexpr int IMG_WIDTH  = 32;
-constexpr int IMG_HEIGHT = 32;
+// Expected input image size (16x16, RGB 3 channels)
+constexpr int IMG_WIDTH  = 16;
+constexpr int IMG_HEIGHT = 16;
 constexpr int IMG_CHANNELS = 3;
 
 // RAW data to float
